@@ -5,8 +5,10 @@ const { axiosLog, log } = require("./logger");
 
 async function getHTML(url) {
   try {
-    const res = await axios.get(url);
-    return res;
+    const response = await axios.get(url);
+    const { data } = response;
+    const responseUrl = response.request.res.responseUrl;
+    return { data, responseUrl };
   } catch (error) {
     axiosLog(error);
   }

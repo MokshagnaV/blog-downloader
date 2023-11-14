@@ -4,7 +4,7 @@ const { parse } = require("node-html-parser");
 const { URL } = require("url");
 const path = require("path");
 const { rimrafSync } = require("rimraf");
-const { log, axiosLog } = require("./logger");
+const { log } = require("./logger");
 const {
   crawlReferenceLinks,
   generateLinkForRelativePaths,
@@ -16,7 +16,7 @@ const {
 } = require("./utilities");
 
 const QUERIES = {
-  css: { q: "link[rel='stylesheet']", src: "href" },
+  css: { q: "link[rel='stylesheet'],link[as='style']", src: "href" },
   js: { q: "script", src: "src" },
   img: { q: "img", src: "src" },
 };
@@ -64,10 +64,8 @@ function createRootFolder(title) {
 
 async function downloadPage(url, dest = "") {
   try {
-    const response = await axios.get(url);
-    const { data } = response;
-    url = response.request.res.responseUrl;
-    url = new URL(url);
+    const { data, responseUrl } = await getHTML(url);
+    url = new URL(responseUrl);
     const origin = url.origin;
     // const data = fs.readFileSync("test.html", { encoding: "utf-8" });
     const document = parse(data);
@@ -145,7 +143,10 @@ async function downloadPage(url, dest = "") {
     if (res) {
       for (let i = 0; i < referenceLinks.length; i++) {
         const ref = referenceLinks[i];
-        ref.DOM.setAttribute("href", `./references/${res[i]}/index.html`);
+        ref.DOM.setAttribute(
+          "href",
+          `./references/${encodeURIComponent(res[i])}/index.html`
+        );
       }
     }
     saveHTML(document.toString());
@@ -161,8 +162,18 @@ downloadPage(
   "/home/mokshagna/Downloads"
 );
 
-// axios
-//   .get(
-//     "https://medium.freecodecamp.org/simplified-explanation-to-mvc-5d307796df30"
+// fs.readFile(
+//   "/home/mokshagna/Downloads/Express 102: CRUD and MVC | The Odin Project/references/What is MVC, and how is it like a sandwich shop?/index.html",
+//   (err, data) => {
+//     if (err) log(err.stack);
+//     const doc = parse(data);
+//     const css = doc.querySelectorAll(QUERIES.css.q);
+//     css.forEach((c) => console.log(c.getAttribute("href")));
+//   }
+// );
+
+// console.log(
+//   encodeURIComponent(
+//     "Express 102: CRUD and MVC | The Odin Project/references/What is MVC, and how is it like a sandwich shop?/index.html"
 //   )
-//   .then((res) => console.log(res.request.res.responseUrl));
+// );
