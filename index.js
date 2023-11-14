@@ -4,6 +4,16 @@ const { parse } = require("node-html-parser");
 const { URL } = require("url");
 const path = require("path");
 const { rimrafSync } = require("rimraf");
+const { log, axiosLog } = require("./logger");
+const {
+  crawlReferenceLinks,
+  generateLinkForRelativePaths,
+  getFileName,
+  setRelativePath,
+  generateDirectoryPath,
+  downloadFile,
+  getHTML,
+} = require("./utilities");
 
 const QUERIES = {
   css: { q: "link[rel='stylesheet']", src: "href" },
@@ -52,61 +62,20 @@ function createRootFolder(title) {
   }
 }
 
-async function downloadAndSaveFile(link, fileName) {
-  try {
-    const { data } = await axios.get(link);
-
-    fs.writeFile(fileName, data, (err) => {
-      if (err) throw err;
-      console.log("Downloaded file", fileName);
-    });
-  } catch (error) {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      fs.createWriteStream("Log.log", error.response);
-    } else if (error.request) {
-      // The request was made but no response was received
-      // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-      // http.ClientRequest in node.js
-      fs.createWriteStream("Log.log", error.request);
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      fs.createWriteStream("Log.log", error.message);
-    }
-    console.log(error.config);
-  }
-}
-
-function crawlReferenceLinks(document) {
-  const lessonContent = document.querySelector(".lesson-content");
-  if (!lessonContent) return;
-  const links = lessonContent.querySelectorAll("a");
-  let references = [];
-  links.forEach((link) => {
-    const src = link.getAttribute("href");
-    if (src && src.includes("https"))
-      references.push({ address: link.getAttribute("href"), DOM: link });
-  });
-  references = references.filter((r) => {
-    const url = new URL(r.address);
-    return url.hostname !== "www.youtube.com";
-  });
-  return references;
-}
-
 async function downloadPage(url, dest = "") {
   try {
+    const response = await axios.get(url);
+    const { data } = response;
+    url = response.request.res.responseUrl;
     url = new URL(url);
     const origin = url.origin;
-    const { data } = await axios.get(url.href);
     // const data = fs.readFileSync("test.html", { encoding: "utf-8" });
     const document = parse(data);
 
     function saveHTML(data) {
       fs.writeFile(path.join(directories.root, "index.html"), data, (err) => {
         if (err) throw err;
-        console.log("HTML file creation DONE!");
+        log("HTML file creation DONE!");
       });
     }
 
@@ -114,16 +83,37 @@ async function downloadPage(url, dest = "") {
       const query = QUERIES[type].q;
       const src = QUERIES[type].src;
 
-      const Files = document.querySelectorAll(query);
+      let tags = document.querySelectorAll(query);
 
-      Files.forEach((file) => {
-        const source = file.getAttribute(src);
-        if (source && source.charAt(0) === "/") {
-          const link = new URL(`${origin}${source}`);
-          const paths = link.pathname.split("/");
-          const fileName = paths[paths.length - 1];
-          file.setAttribute(src, `./${type}/${fileName}`);
-          downloadAndSaveFile(link.href, `${directories[type]}/${fileName}`);
+      tags = tags.filter((tag) => {
+        const source = tag.getAttribute(src);
+        if (!source) return false;
+        if (source.charAt(0) === "/") return true;
+        else {
+          const link = new URL(source);
+          return link.host.includes("cdn");
+        }
+      });
+
+      tags.forEach((tag) => {
+        const source = tag.getAttribute(src);
+        if (source.charAt(0) === "/") {
+          const link = generateLinkForRelativePaths(origin, source);
+          const fileName = getFileName(link);
+          setRelativePath(tag, src, type, fileName);
+          const directoryPath = generateDirectoryPath(
+            directories[type],
+            fileName
+          );
+          downloadFile(type, link, directoryPath);
+        } else {
+          const fileName = getFileName(source);
+          setRelativePath(tag, src, type, fileName);
+          const directoryPath = generateDirectoryPath(
+            directories[type],
+            fileName
+          );
+          downloadFile(type, source, directoryPath);
         }
       });
     }
@@ -159,26 +149,20 @@ async function downloadPage(url, dest = "") {
       }
     }
     saveHTML(document.toString());
-    console.log("saved html", title);
+    log("saved html", title);
     return title;
   } catch (error) {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      fs.createWriteStream("Log.log", error.response);
-    } else if (error.request) {
-      // The request was made but no response was received
-      // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
-      // http.ClientRequest in node.js
-      fs.createWriteStream("Log.log", error.request);
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      fs.createWriteStream("Log.log", error.message);
-    }
-    console.log(error.config);
+    log(error.stack);
   }
 }
 
 downloadPage(
-  "https://www.theodinproject.com/lessons/nodejs-express-102-crud-and-mvc"
+  "https://www.theodinproject.com/lessons/nodejs-express-102-crud-and-mvc",
+  "/home/mokshagna/Downloads"
 );
+
+// axios
+//   .get(
+//     "https://medium.freecodecamp.org/simplified-explanation-to-mvc-5d307796df30"
+//   )
+//   .then((res) => console.log(res.request.res.responseUrl));
