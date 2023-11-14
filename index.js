@@ -25,9 +25,7 @@ const CSS = "css";
 const JS = "js";
 const IMG = "img";
 
-let firstTime = false;
-
-function createRootFolder(title) {
+function createRootFolder(title, firstTime) {
   /* This function is used to create folder structure for the page
      Root (title)
       - css
@@ -52,7 +50,7 @@ function createRootFolder(title) {
     fs.mkdirSync(paths.css);
     fs.mkdirSync(paths.js);
     fs.mkdirSync(paths.img);
-    if (!firstTime) fs.mkdirSync(paths.refs);
+    if (firstTime) fs.mkdirSync(paths.refs);
     return paths;
   } catch (err) {
     if (err.code === "ENOENT") {
@@ -62,7 +60,7 @@ function createRootFolder(title) {
   }
 }
 
-async function downloadPage(url, dest = "") {
+async function downloadPage(url, dest = "", firstTime = true) {
   try {
     const { data, responseUrl } = await getHTML(url);
     url = new URL(responseUrl);
@@ -118,7 +116,7 @@ async function downloadPage(url, dest = "") {
 
     // >>>>>>>>>>>>>>Creating a root folder
     const title = document.querySelector("title").innerText.trim();
-    const directories = createRootFolder(path.join(dest, title));
+    const directories = createRootFolder(path.join(dest, title), firstTime);
 
     // >>>>>>>>>>>>>>>>Downloading all the css files
     gatherFiles(CSS);
@@ -129,15 +127,16 @@ async function downloadPage(url, dest = "") {
     // >>>>>>>>>>>>>>>>Downloading all the js files
     gatherFiles(IMG);
     let referenceLinks;
-    if (!firstTime) {
+    if (firstTime) {
       referenceLinks = crawlReferenceLinks(document);
-      firstTime = true;
     }
 
     let res;
     if (referenceLinks) {
       res = await Promise.all(
-        referenceLinks.map((ref) => downloadPage(ref.address, directories.refs))
+        referenceLinks.map((ref) =>
+          downloadPage(ref.address, directories.refs, false)
+        )
       );
     }
     if (res) {
@@ -157,23 +156,47 @@ async function downloadPage(url, dest = "") {
   }
 }
 
-downloadPage(
+// Downloader.downloadPage(
+//   "https://www.theodinproject.com/lessons/nodejs-express-102-crud-and-mvc",
+//   "/home/mokshagna/Downloads"
+// );
+
+function downloadAllPages(pages, location, dirName = "Collection") {
+  try {
+    const path = location + "/" + dirName;
+    fs.mkdirSync(path);
+    downloadPage(pages[0], path);
+    const msg = "downloading " + pages[0] + " is started";
+    console.log(msg);
+    log(msg);
+
+    for (let i = 1; i < pages.length; i++) {
+      setTimeout(() => {
+        downloadPage(pages[i], path);
+        const msg = "downloading " + pages[i] + " is started";
+        console.log(msg);
+        log(msg);
+      }, i * 10 * 1000);
+    }
+  } catch (error) {
+    log(error.stack);
+  }
+}
+
+const pages = [
+  "https://www.theodinproject.com/lessons/nodejs-introduction-to-express",
+  "https://www.theodinproject.com/lessons/nodejs-express-101",
   "https://www.theodinproject.com/lessons/nodejs-express-102-crud-and-mvc",
-  "/home/mokshagna/Downloads"
+  "https://www.theodinproject.com/lessons/nodejs-mini-message-board",
+  "https://www.theodinproject.com/lessons/nodejs-deployment",
+  "https://www.theodinproject.com/lessons/nodejs-express-103-routes-and-controllers",
+  "https://www.theodinproject.com/lessons/nodejs-express-104-view-templates",
+  "https://www.theodinproject.com/lessons/nodejs-express-105-forms-and-deployment",
+  "https://www.theodinproject.com/lessons/nodejs-inventory-application",
+];
+
+downloadAllPages(
+  pages,
+  "/home/mokshagna/Downloads",
+  "Odin_Project_MongoDB_Mongoose"
 );
-
-// fs.readFile(
-//   "/home/mokshagna/Downloads/Express 102: CRUD and MVC | The Odin Project/references/What is MVC, and how is it like a sandwich shop?/index.html",
-//   (err, data) => {
-//     if (err) log(err.stack);
-//     const doc = parse(data);
-//     const css = doc.querySelectorAll(QUERIES.css.q);
-//     css.forEach((c) => console.log(c.getAttribute("href")));
-//   }
-// );
-
-// console.log(
-//   encodeURIComponent(
-//     "Express 102: CRUD and MVC | The Odin Project/references/What is MVC, and how is it like a sandwich shop?/index.html"
-//   )
-// );
